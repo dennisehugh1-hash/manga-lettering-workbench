@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>嵌字工作台 · manga-lettering-workbench</title>
+<style>
+  :root{--bg:#faf9f6;--surface:#fff;--alt:#f1efe9;--text:#1d1a16;--dim:#6f6a61;--border:#e3ded2;
+    --accent:#8a6d3b;--accent-soft:#f3ead7;--ok:#2e7d4f;--ok-soft:#e2f2e7;--warn:#9a6a12;--warn-soft:#fdf0d3;--radius:10px}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);font:15px/1.7 -apple-system,"PingFang SC","Microsoft YaHei",sans-serif}
+  main{max-width:760px;margin:0 auto;padding:20px 16px 64px}
+  h1{font-family:"Songti SC","Noto Serif SC",serif;font-size:22px;margin:6px 0 2px}
+  h2{font-family:"Songti SC","Noto Serif SC",serif;font-size:17px;margin:0}
+  .dim{color:var(--dim)} .small{font-size:13px} .mono{font-family:ui-monospace,Menlo,monospace}
+  .notice{background:var(--accent-soft);border:1px solid #e5d5ae;border-radius:var(--radius);padding:10px 14px;font-size:13px;line-height:1.7}
+  .tabs{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}
+  .tab{border:1px solid var(--border);background:var(--surface);border-radius:999px;padding:8px 14px;font-size:14px;cursor:pointer}
+  .tab.active{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+  .tab .dim{margin-left:6px;font-size:12px}.tab.active .dim{color:rgba(255,255,255,.85)}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius)}
+  .bar{height:8px;background:var(--alt);border-radius:999px;overflow:hidden;margin-top:10px}
+  .bar>i{display:block;height:100%;background:var(--ok);border-radius:999px}
+  button{font:inherit;cursor:pointer}
+  .btn{background:var(--accent);color:#fff;border:0;border-radius:var(--radius);padding:9px 16px;font-size:14px;font-weight:600}
+  .btn.ghost{background:var(--surface);color:var(--text);border:1px solid var(--border);font-weight:400}
+  .btn.danger{background:none;color:var(--accent);padding:9px 10px}
+  .btn:disabled{opacity:.4;cursor:default}
+  input[type=text],textarea{width:100%;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg);padding:9px 12px;font:inherit;font-size:14px}
+  section{margin-top:36px}
+  .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:12px}
+  @media(min-width:600px){.grid{grid-template-columns:repeat(4,1fr)}}
+  .page{border:1px solid var(--border);background:var(--surface);border-radius:var(--radius);overflow:hidden;text-align:left;padding:0;cursor:pointer}
+  .page.active{border-color:var(--accent);outline:2px solid var(--accent)}
+  .thumb{aspect-ratio:3/4;background:var(--alt);display:flex;align-items:center;justify-content:center;font-size:26px;color:var(--dim)}
+  .thumb img{width:100%;height:100%;object-fit:cover}
+  .page .meta{padding:8px}
+  .pill{border-radius:999px;padding:2px 7px;font-size:11px}
+  .detail{margin-top:14px;padding:16px}
+  .detail img.preview{max-height:420px;width:100%;object-fit:contain;border-radius:var(--radius);background:var(--alt)}
+  .status-row{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+  .status-btn{border-radius:999px;padding:8px 14px;font-size:14px;border:0}
+  .check{display:flex;align-items:center;gap:10px;padding:8px;border-radius:var(--radius);cursor:pointer;font-size:14px}
+  .check:hover{background:var(--alt)}
+  .check input{width:20px;height:20px;accent-color:var(--accent)}
+  .check.done span{text-decoration:line-through;color:var(--dim)}
+  .pending{padding:12px 14px;margin-top:10px;display:flex;gap:12px;align-items:flex-start}
+  .pending.resolved{opacity:.6}
+  .pending input{width:20px;height:20px;margin-top:4px;accent-color:var(--accent)}
+  details{border-bottom:1px solid var(--border);padding:4px 0}
+  summary{cursor:pointer;font-weight:600;font-size:14px;padding:12px 0;list-style:none;display:flex;justify-content:space-between}
+  summary::-webkit-details-marker{display:none}
+  details ul,details ol{margin:0 0 14px;padding-left:22px}
+  details li{margin:2px 0}
+  .row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+  .iron{color:var(--accent);font-weight:600}
+  footer{margin-top:40px;border-top:1px solid var(--border);padding-top:14px}
+</style>
+</head>
+<body>
+<main>
+  <h1>嵌字工作台</h1>
+  <p class="dim small">漫画嵌字 · 按页跟踪进度、核查清单、待确认事项。嵌字本身仍在聊天里按规矩做，这里只收文件和记进度。</p>
+  <div class="notice">数据只存在你自己的浏览器里（localStorage），不经过任何服务器。换浏览器、换设备、清缓存都会看不到之前的数据——请经常用下面的「导出备份」存一份 JSON；别人打开这个链接看到的是他自己浏览器里的数据，互不相通。</div>
+
+  <div class="tabs" id="bookTabs"></div>
+  <div id="newBookBox" style="margin-top:10px"></div>
+
+  <div id="bookArea"></div>
+
+  <section aria-label="待确认事项">
+    <h2>待确认事项 <span id="pendingCount" class="small" style="color:var(--warn);font-weight:400"></span></h2>
+    <div id="pendingList"></div>
+    <form id="pendingForm" style="margin-top:14px">
+      <label class="small" for="pendingTitle"><b>新增待确认事项</b></label>
+      <input type="text" id="pendingTitle" placeholder="比如：第 7 页和第 8 页顺序是否对调" style="margin-top:6px">
+      <textarea id="pendingDetail" rows="2" placeholder="补充说明（可不填）" style="margin-top:8px"></textarea>
+      <button class="btn ghost" type="submit" style="margin-top:8px">记下来</button>
+    </form>
+  </section>
+
+  <section aria-label="嵌字规矩">
+    <h2>干活的规矩</h2>
+    <div style="border-top:1px solid var(--border);margin-top:10px">
+      <details>
+        <summary>格式规范 <span>＋</span></summary>
+        <ul>
+          <li>只替换带彩色边框的对话、旁白和心声，框里的呻吟也译成中文。</li>
+          <li>画面上的大号拟声词、环境音一律不动，保留原样。</li>
+          <li>字样：竖排白字＋黑描边＋外圈彩色边；颜色取样原框，按颜色区分人物。</li>
+          <li>字体比原文细一档（Noto Sans SC Bold），字号尽量贴近原文，小框里的短句略小。</li>
+          <li>译文以翻译文档「中文翻译」栏为准，译名按文档规范统一；中文栏仍是日文、或框在文档里缺行时补译并记录。</li>
+        </ul>
+      </details>
+      <details>
+        <summary>翻译流程（核查类交付口径） <span>＋</span></summary>
+        <ol>
+          <li>用链接下载的最初原版重新识别日文，整合成一份原文文档。</li>
+          <li>先对原文文档做完整性和意思检查，再翻译出译文文档。</li>
+          <li>译完逐页检查可读性：看得懂、贴合原意、文风精美。</li>
+          <li>核查类任务先逐页比对、只交付原文文档，不先在对话框里回答。</li>
+        </ol>
+        <p class="iron">铁律：底图与 OCR 源必须用最初下载的无损原图，不用经手压缩过的版本，避免文件逐版变小、画质下降。</p>
+      </details>
+      <details>
+        <summary>本地嵌字步骤 <span>＋</span></summary>
+        <ol>
+          <li>拿素材：从聊天附件或网盘取原图包和翻译文档，本机解压；大文件只走已授权的私有读取，不开公开分享绕过。</li>
+          <li>对页：按文档页码标题把每页对到图片文件，抽查确认日文原文和图片一致（以页码和内容为准，不只看文件名）。</li>
+          <li>识别文字框：颜色分割找出带彩框的对话、旁白、心声，与文档行数和位置核对。</li>
+          <li>本地擦字补背景：OpenCV inpaint 或本地 LaMa，不用云端生图模型。</li>
+          <li>嵌字：按格式规范排竖排字；封面和手机/屏幕消息如要求翻译，按各自原样式。</li>
+          <li>如要求，在最前面加一张同尺寸声明页。</li>
+          <li>自查：看缩略图查日文残留、漏框、颜色错误、有没有碰到拟声词；同色多框的页核对台词别放错框。逐页核查清单就在每页详情里。</li>
+          <li>输出：保留原画质（原图 PNG 就输出无损 PNG），按顺序命名；打包发送或上传指定网盘文件夹后核对数量和文件名。</li>
+        </ol>
+        <p>页序有疑点时，按剧情、旁白时间线、服装连续性和对话衔接推理，先把疑点页列进「待确认事项」，确认后再调整，不要直接改。</p>
+      </details>
+      <details>
+        <summary>第二本漫画 · 现行口径 <span>＋</span></summary>
+        <ul>
+          <li>素材：用户上传 1–10 页 PNG（1200×1600），已含中文对话，仅拟声词为日文。</li>
+          <li>已废弃：填色改色、字体渲染重排（v2、v3 气泡内约束版）——这条路线已彻底叫停，不要再用。</li>
+          <li>现行：保留原图字形 100%，只加深原字颜色或调对比度，让字看得清。</li>
+          <li>加深只针对高饱和的文字；人物肤色、衣服等低饱和部分一律排除，不得改动人物颜色。</li>
+        </ul>
+      </details>
+      <details>
+        <summary>本地环境清单 <span>＋</span></summary>
+        <ul>
+          <li>manga-ocr（kha-white/manga-ocr-base）：可用；合成图测试 3/3，真实漫画页准确率未验证，不硬吹。</li>
+          <li>OpenCV inpaint：可用，是经典算法，不是 LaMa，不冒充。</li>
+          <li>LaMa（big-lama.pt 本地 TorchScript）：可用，合成测试端到端通过；真实漫画复杂背景上的擦字质量未验证。</li>
+          <li>字体：Noto Sans SC 可变字体，wght=700 当 Bold 用。</li>
+          <li>环境位置：~/workspace/manga-lettering-env 隔离 venv（Pillow / cv2 / torch CPU 等都在里面）。</li>
+        </ul>
+      </details>
+    </div>
+  </section>
+
+  <footer>
+    <h2>备份与数据</h2>
+    <p class="dim small">浏览器本地存储约 5–10 MB，原图 PNG 一张就可能占满。传大图前先导出备份；存不下时会提示，改传压缩过的预览图或只记进度、不存原图。</p>
+    <p class="small">已用本地存储：<span id="storageUse" class="mono">—</span></p>
+    <div class="row">
+      <button class="btn ghost" id="exportBtn" type="button">导出备份（JSON）</button>
+      <button class="btn ghost" id="importBtn" type="button">导入备份</button>
+      <input type="file" id="importFile" accept="application/json,.json" hidden>
+      <button class="btn danger" id="wipeBtn" type="button">清空全部数据</button>
+    </div>
+    <p class="dim small" style="margin-top:12px">来源：Muse 上的「嵌字任务」工作台同款内容与规矩，改写为不依赖服务器的单文件网页版。功能：传图、记进度、待确认清单、核查打勾。</p>
+  </footer>
+</main>
+
+<input type="file" id="addPagesInput" accept="image/*" multiple hidden>
+<input type="file" id="docInput" hidden>
+<input type="file" id="pageImgInput" accept="image/*" hidden>
+
+<script>
+"use strict";
+var KEY = "manga-lettering-workbench-v1";
+var STATUSES = ["未开始","处理中","待核查","待确认","已完成"];
+var CHECKS = [
+  {key:"residual", label:"彩框内无日文残留"},
+  {key:"missing",  label:"无漏框，框数与译文文档对得上"},
+  {key:"color",    label:"气泡颜色与人物对应无误"},
+  {key:"placement",label:"同色多框的台词没放错框"},
+  {key:"sfx",      label:"拟声词、环境音大字未动"},
+  {key:"quality",  label:"输出尺寸与原图一致、画质无损"},
+  {key:"figure",   label:"人物颜色未被改动，只动了文字"}
+];
+function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,8); }
+function nowISO(){ return new Date().toISOString(); }
+function seed(){
+  var pages = [];
+  for (var i=1;i<=10;i++) pages.push({id:uid()+i, no:i, status:"未开始", note:"", checks:{}, original:null, result:null, updatedAt:nowISO()});
+  return {
+    books:[{id:uid(), title:"第二本漫画",
+      note:"用户上传 1–10 页 PNG（1200×1600），已含中文对话、仅拟声词为日文。现行口径：保留原图字形 100%，只加深原字颜色或调对比度；填色改色、字体重排路线已废弃；不得改动人物颜色。",
+      docName:null, docData:null, pages:pages}],
+    pending:[{id:uid(), title:"底图必须用最初下载的无损原版",
+      detail:"嵌字底图与 OCR 源只用链接下载的最初无损原图，不用经手压缩过的版本，避免交付文件逐版变小、画质下降。开工前先确认这批页的底图来源。",
+      resolved:false, createdAt:nowISO()}]
+  };
+}
+function load(){
+  try { var raw = localStorage.getItem(KEY); if (raw) { var d = JSON.parse(raw); if (d && d.books) return d; } } catch(e){}
+  var d = seed(); save(d); return d;
+}
+function save(d){ try { localStorage.setItem(KEY, JSON.stringify(d)); } catch(e){ alert("存不下了：浏览器本地存储已满。请先导出备份，再删掉一些已存的图片，或只记进度不存原图。"); throw e; } }
+var state = load();
+var activeBookId = state.books.length ? state.books[0].id : null;
+var openPageId = null;
+var pageImgTarget = null; // {pageId, kind}
+
+function esc(s){ return String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
+function activeBook(){ return state.books.find(function(b){return b.id===activeBookId;}) || state.books[0] || null; }
+function statusColors(s){
+  if (s==="已完成") return ["var(--ok-soft)","var(--ok)"];
+  if (s==="待确认"||s==="待核查") return ["var(--warn-soft)","var(--warn)"];
+  if (s==="处理中") return ["var(--accent-soft)","var(--accent)"];
+  return ["var(--alt)","var(--dim)"];
+}
+function readFile(file){ return new Promise(function(res,rej){ var r=new FileReader(); r.onload=function(){res(r.result);}; r.onerror=function(){rej(new Error("读取文件失败"));}; r.readAsDataURL(file); }); }
+function storageMB(){ try { var raw = localStorage.getItem(KEY)||""; return (raw.length*2/1048576).toFixed(2)+" MB"; } catch(e){ return "未知"; } }
+
+function render(){
+  document.getElementById("storageUse").textContent = storageMB();
+  // tabs
+  var tabs = document.getElementById("bookTabs"); tabs.innerHTML = "";
+  state.books.forEach(function(b){
+    var done = b.pages.filter(function(p){return p.status==="已完成";}).length;
+    var btn = document.createElement("button");
+    btn.type="button"; btn.className="tab"+(activeBook()&&b.id===activeBook().id?" active":"");
+    btn.innerHTML = esc(b.title)+'<span class="dim">'+done+"/"+b.pages.length+" 页</span>";
+    btn.onclick = function(){ activeBookId=b.id; openPageId=null; render(); };
+    tabs.appendChild(btn);
+  });
+  var nb = document.createElement("button");
+  nb.type="button"; nb.className="tab"; nb.textContent="＋ 新建一本书";
+  nb.onclick = showNewBookForm; tabs.appendChild(nb);
+
+  renderBook(); renderPending();
+}
+function showNewBookForm(){
+  var box = document.getElementById("newBookBox");
+  box.innerHTML = '<div class="card" style="padding:14px"><label class="small"><b>书名</b></label>'+
+    '<input type="text" id="nbTitle" placeholder="比如：第三本漫画" style="margin-top:6px">'+
+    '<label class="small" style="display:block;margin-top:10px"><b>备注（可不填）</b></label>'+
+    '<textarea id="nbNote" rows="2" placeholder="这本书的口径、来源、特殊要求" style="margin-top:6px"></textarea>'+
+    '<div class="row" style="margin-top:10px"><button class="btn" id="nbCreate" type="button">建书</button>'+
+    '<button class="btn ghost" id="nbCancel" type="button">取消</button></div></div>';
+  document.getElementById("nbCreate").onclick = function(){
+    var t = document.getElementById("nbTitle").value.trim();
+    if (!t){ alert("先给这本书起个名字。"); return; }
+    var b = {id:uid(), title:t, note:document.getElementById("nbNote").value.trim(), docName:null, docData:null, pages:[]};
+    state.books.push(b); activeBookId=b.id; save(state); render();
+  };
+  document.getElementById("nbCancel").onclick = function(){ box.innerHTML=""; };
+}
+function renderBook(){
+  var area = document.getElementById("bookArea"); area.innerHTML = "";
+  var book = activeBook();
+  if (!book){ area.innerHTML = '<p class="dim small" style="margin-top:16px">还没有书。点上面「＋ 新建一本书」。 </p>'; return; }
+  var done = book.pages.filter(function(p){return p.status==="已完成";}).length;
+  var total = book.pages.length;
+  var sec = document.createElement("section");
+  var h = '<h1>'+esc(book.title)+'</h1><p class="dim mono small">已完成 '+done+" / "+total+' 页</p>'+
+    '<div class="bar"><i style="width:'+(total?Math.round(done/total*100):0)+'%"></i></div>';
+  if (book.note) h += '<p class="dim small" style="margin-top:10px">'+esc(book.note)+"</p>";
+  h += '<p class="small" style="margin-top:8px">'+STATUSES.map(function(s){
+    var n = book.pages.filter(function(p){return p.status===s;}).length;
+    if (!n) return "";
+    var c = statusColors(s); return '<span style="color:'+c[1]+';margin-right:12px">'+s+" "+n+"</span>";
+  }).join("")+"</p>";
+  h += '<div class="row" style="margin-top:12px">'+
+    '<button class="btn" id="uploadBtn" type="button">上传原图（可多选）</button>'+
+    '<button class="btn ghost" id="blankBtn" type="button">加一页占位</button>'+
+    '<button class="btn ghost" id="docBtn" type="button">'+(book.docName?"替换翻译文档":"上传翻译文档")+"</button></div>";
+  if (book.docName) h += '<p class="dim small" style="margin-top:8px">翻译文档：'+
+    (book.docData?'<a href="'+book.docData+'" download="'+esc(book.docName)+'" style="color:var(--accent)">'+esc(book.docName)+"</a>":esc(book.docName))+"</p>";
+  h += '<p class="small" id="uploadMsg" style="color:var(--accent)"></p>';
+  h += '<h2 style="margin-top:28px">逐页进度</h2>';
+  if (!total) h += '<p class="dim small">这本书还没有页。用上面的「上传原图」把漫画页传进来，就会按顺序排成页卡；也可以先加占位页，图回头再补。</p>';
+  sec.innerHTML = h; area.appendChild(sec);
+
+  document.getElementById("uploadBtn").onclick = function(){ document.getElementById("addPagesInput").click(); };
+  document.getElementById("blankBtn").onclick = function(){
+    var n = book.pages.reduce(function(m,p){return Math.max(m,p.no);},0)+1;
+    book.pages.push({id:uid(), no:n, status:"未开始", note:"", checks:{}, original:null, result:null, updatedAt:nowISO()});
+    save(state); render();
+  };
+  document.getElementById("docBtn").onclick = function(){ document.getElementById("docInput").click(); };
+
+  if (total){
+    var grid = document.createElement("div"); grid.className="grid";
+    book.pages.forEach(function(p){
+      var card = document.createElement("button");
+      card.type="button"; card.className="page"+(openPageId===p.id?" active":"");
+      var thumb = p.result||p.original;
+      var checked = CHECKS.filter(function(c){return p.checks[c.key];}).length;
+      var c = statusColors(p.status);
+      card.innerHTML = '<div class="thumb">'+(thumb?'<img src="'+thumb+'" alt="第 '+p.no+' 页预览">':esc(p.no))+"</div>"+
+        '<div class="meta"><div style="display:flex;justify-content:space-between;align-items:center"><span class="mono" style="font-weight:600">P'+p.no+'</span>'+
+        '<span class="pill" style="background:'+c[0]+";color:"+c[1]+'">'+p.status+"</span></div>"+
+        '<p class="dim small" style="margin:4px 0 0">'+(p.result?"有成品图":p.original?"只有原图":"没图")+" · 核查 "+checked+"/"+CHECKS.length+"</p></div>";
+      card.onclick = function(){ openPageId = openPageId===p.id?null:p.id; render(); };
+      grid.appendChild(card);
+    });
+    area.appendChild(grid);
+    var open = book.pages.find(function(p){return p.id===openPageId;});
+    if (open) area.appendChild(buildDetail(book, open));
+  }
+  var del = document.createElement("div");
+  del.style.cssText="margin-top:20px;text-align:right";
+  del.innerHTML = '<button class="btn danger" id="delBook" type="button">删除这本书</button>';
+  area.appendChild(del);
+  document.getElementById("delBook").onclick = function(){
+    if (!confirm("连同 "+book.pages.length+" 页和图片一起删？")) return;
+    state.books = state.books.filter(function(b){return b.id!==book.id;});
+    activeBookId = state.books.length?state.books[0].id:null; openPageId=null; save(state); render();
+  };
+}
+function buildDetail(book, page){
+  var div = document.createElement("div"); div.className="card detail";
+  var preview = page.result||page.original;
+  var checked = CHECKS.filter(function(c){return page.checks[c.key];}).length;
+  var h = '<div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px"><h3 class="mono" style="margin:0">第 '+page.no+' 页</h3>'+
+    '<span class="dim small">最后更新 '+new Date(page.updatedAt).toLocaleString("zh-CN")+"</span></div>";
+  if (preview) h += '<img class="preview" style="margin-top:12px" src="'+preview+'" alt="第 '+page.no+' 页">';
+  h += '<p class="dim small">'+(page.result?"上面显示的是成品图。":page.original?"上面显示的是原图，还没有成品图。":"这一页还没有图。")+
+    (page.original&&page.result?' <a href="'+page.original+'" target="_blank" rel="noreferrer" style="color:var(--accent)">看原图</a>':"")+"</p>";
+  h += '<p style="margin:14px 0 0"><b class="small">状态</b></p><div class="status-row">';
+  STATUSES.forEach(function(s){
+    var c = statusColors(s); var on = page.status===s;
+    h += '<button type="button" class="status-btn" data-status="'+s+'" style="background:'+(on?c[1]:c[0])+";color:"+(on?"#fff":c[1])+";font-weight:"+(on?600:400)+'">'+s+"</button>";
+  });
+  h += '</div><p style="margin:18px 0 0"><b class="small">核查清单</b></p><div style="margin-top:6px">';
+  CHECKS.forEach(function(chk){
+    var on = page.checks[chk.key]===true;
+    h += '<label class="check'+(on?" done":"")+'"><input type="checkbox" data-check="'+chk.key+'"'+(on?" checked":"")+'><span>'+chk.label+"</span></label>";
+  });
+  h += '</div><label class="small" style="display:block;margin-top:16px"><b>备注</b></label>'+
+    '<textarea id="pageNote" rows="2" placeholder="这一页有什么要注意的，写在这里">'+esc(page.note)+"</textarea>"+
+    '<div class="row" style="margin-top:8px"><button class="btn ghost" id="saveNote" type="button">保存备注</button></div>'+
+    '<div class="row" style="margin-top:16px;border-top:1px solid var(--border);padding-top:14px">'+
+    '<button class="btn ghost" id="upOrig" type="button">'+(page.original?"换原图":"传原图")+"</button>"+
+    '<button class="btn" id="upResult" type="button">'+(page.result?"换成品图":"传成品图")+"</button>"+
+    '<button class="btn danger" id="delPage" type="button">删除这一页</button></div>';
+  div.innerHTML = h;
+  div.querySelectorAll("[data-status]").forEach(function(b){
+    b.onclick = function(){ page.status=b.getAttribute("data-status"); page.updatedAt=nowISO(); save(state); render(); };
+  });
+  div.querySelectorAll("[data-check]").forEach(function(cb){
+    cb.onchange = function(){ page.checks[cb.getAttribute("data-check")]=cb.checked; page.updatedAt=nowISO(); save(state); render(); };
+  });
+  div.querySelector("#saveNote").onclick = function(){
+    page.note = div.querySelector("#pageNote").value.trim(); page.updatedAt=nowISO(); save(state); render();
+  };
+  div.querySelector("#upOrig").onclick = function(){ pageImgTarget={pageId:page.id, kind:"original"}; document.getElementById("pageImgInput").click(); };
+  div.querySelector("#upResult").onclick = function(){ pageImgTarget={pageId:page.id, kind:"result"}; document.getElementById("pageImgInput").click(); };
+  div.querySelector("#delPage").onclick = function(){
+    if (!confirm("删除第 "+page.no+" 页？")) return;
+    book.pages = book.pages.filter(function(p){return p.id!==page.id;});
+    openPageId=null; save(state); render();
+  };
+  return div;
+}
+function renderPending(){
+  var list = document.getElementById("pendingList"); list.innerHTML="";
+  var open = state.pending.filter(function(p){return !p.resolved;}).length;
+  document.getElementById("pendingCount").textContent = open?open+" 条未确认":"";
+  if (!state.pending.length){
+    list.innerHTML = '<p class="dim small">没有待确认事项。拿不准的页序、缺行的框、译名拿不准的地方，都记在这里，确认完打勾。</p>';
+    return;
+  }
+  state.pending.forEach(function(item){
+    var row = document.createElement("div");
+    row.className="card pending"+(item.resolved?" resolved":"");
+    row.innerHTML = '<input type="checkbox"'+(item.resolved?" checked":"")+' aria-label="确认">'+
+      '<div style="flex:1;min-width:0"><p style="margin:0;font-weight:600;'+(item.resolved?"text-decoration:line-through":"")+'">'+esc(item.title)+"</p>"+
+      (item.detail?'<p class="dim small" style="margin:4px 0 0">'+esc(item.detail)+"</p>":"")+
+      '<p class="dim small" style="margin:4px 0 0">'+(item.resolved?"已确认":"待确认")+" · "+new Date(item.createdAt).toLocaleDateString("zh-CN")+"</p></div>"+
+      '<button type="button" class="btn danger" style="padding:4px 8px">删除</button>';
+    row.querySelector("input").onchange = function(e){ item.resolved=e.target.checked; save(state); render(); };
+    row.querySelector("button").onclick = function(){
+      state.pending = state.pending.filter(function(p){return p.id!==item.id;}); save(state); render();
+    };
+    list.appendChild(row);
+  });
+}
+document.getElementById("pendingForm").addEventListener("submit", function(e){
+  e.preventDefault();
+  var t = document.getElementById("pendingTitle").value.trim();
+  if (!t){ alert("先写一句要确认什么。"); return; }
+  state.pending.unshift({id:uid(), title:t, detail:document.getElementById("pendingDetail").value.trim(), resolved:false, createdAt:nowISO()});
+  document.getElementById("pendingTitle").value=""; document.getElementById("pendingDetail").value="";
+  save(state); render();
+});
+document.getElementById("addPagesInput").addEventListener("change", function(e){
+  var files = Array.prototype.slice.call(e.target.files||[]); e.target.value="";
+  var book = activeBook(); if (!book||!files.length) return;
+  var msg = document.getElementById("uploadMsg"); if (msg) msg.textContent = "正在上传，还剩 "+files.length+" 个文件…";
+  var remaining = files.length;
+  var chain = Promise.resolve();
+  files.forEach(function(file){
+    chain = chain.then(function(){
+      return readFile(file).then(function(dataUrl){
+        var n = book.pages.reduce(function(m,p){return Math.max(m,p.no);},0)+1;
+        book.pages.push({id:uid(), no:n, status:"未开始", note:"", checks:{}, original:dataUrl, result:null, updatedAt:nowISO()});
+        save(state);
+        remaining -= 1;
+        if (msg) msg.textContent = remaining>0 ? "正在上传，还剩 "+remaining+" 个文件…" : "";
+      });
+    });
+  });
+  chain.then(function(){ render(); }).catch(function(){ if (msg) msg.textContent="有图片没传上去：浏览器本地存储满了，先导出备份再删掉一些已存图片。"; render(); });
+});
+document.getElementById("docInput").addEventListener("change", function(e){
+  var file = (e.target.files||[])[0]; e.target.value="";
+  var book = activeBook(); if (!file||!book) return;
+  readFile(file).then(function(dataUrl){ book.docName=file.name; book.docData=dataUrl; save(state); render(); })
+    .catch(function(){ alert("文档没传上去，再试一次。"); });
+});
+document.getElementById("pageImgInput").addEventListener("change", function(e){
+  var file = (e.target.files||[])[0]; e.target.value="";
+  if (!file||!pageImgTarget) return;
+  var book = activeBook();
+  var page = book?book.pages.find(function(p){return p.id===pageImgTarget.pageId;}):null;
+  var kind = pageImgTarget.kind; pageImgTarget=null;
+  if (!page) return;
+  readFile(file).then(function(dataUrl){
+    if (kind==="original") page.original=dataUrl; else page.result=dataUrl;
+    page.updatedAt=nowISO(); save(state); render();
+  }).catch(function(){ alert("图片没传上去，再试一次。"); });
+});
+document.getElementById("exportBtn").onclick = function(){
+  var blob = new Blob([JSON.stringify(state,null,2)], {type:"application/json"});
+  var a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "manga-lettering-workbench-backup-"+new Date().toISOString().slice(0,10)+".json";
+  a.click(); setTimeout(function(){ URL.revokeObjectURL(a.href); }, 1000);
+};
+document.getElementById("importBtn").onclick = function(){ document.getElementById("importFile").click(); };
+document.getElementById("importFile").addEventListener("change", function(e){
+  var file = (e.target.files||[])[0]; e.target.value=""; if (!file) return;
+  var r = new FileReader();
+  r.onload = function(){
+    try {
+      var d = JSON.parse(String(r.result));
+      if (!d||!Array.isArray(d.books)||!Array.isArray(d.pending)) throw new Error("格式不对");
+      if (!confirm("导入会覆盖当前全部数据，先确认你已导出备份。继续吗？")) return;
+      state = d; activeBookId = state.books.length?state.books[0].id:null; openPageId=null;
+      save(state); render(); alert("已导入。");
+    } catch(err){ alert("导入失败：不是这个工作台的备份文件。"); }
+  };
+  r.readAsText(file);
+});
+document.getElementById("wipeBtn").onclick = function(){
+  if (!confirm("清空全部书籍、页面和待确认事项？先导出备份再清。")) return;
+  localStorage.removeItem(KEY); state = seed(); activeBookId = state.books[0].id; openPageId=null; save(state); render();
+};
+render();
+</script>
+</body>
+</html>
