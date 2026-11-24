@@ -1,4 +1,7 @@
 <!DOCTYPE html>
+<!-- 嵌字工作台 · 自带嵌字版（v2）
+     单文件、零外部依赖。跟踪进度 + 页内框选嵌字（OpenAI 兼容 API，各人自带 key）。
+     tracker-only 的上一版备份在 tracker-v1.html，git tag tracker-v1。 -->
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8">
@@ -26,7 +29,7 @@
   .btn.ghost{background:var(--surface);color:var(--text);border:1px solid var(--border);font-weight:400}
   .btn.danger{background:none;color:var(--accent);padding:9px 10px}
   .btn:disabled{opacity:.4;cursor:default}
-  input[type=text],textarea{width:100%;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg);padding:9px 12px;font:inherit;font-size:14px}
+  input[type=text],input[type=password],select,textarea{width:100%;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg);padding:9px 12px;font:inherit;font-size:14px}
   section{margin-top:36px}
   .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:12px}
   @media(min-width:600px){.grid{grid-template-columns:repeat(4,1fr)}}
@@ -55,13 +58,41 @@
   .row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
   .iron{color:var(--accent);font-weight:600}
   footer{margin-top:40px;border-top:1px solid var(--border);padding-top:14px}
+  /* 嵌字工作区（v2 新增） */
+  .overlay{position:fixed;inset:0;background:var(--bg);z-index:50;overflow:auto;display:none}
+  .overlay.open{display:block}
+  .rect-row{padding:12px 14px;margin-top:10px}
+  .rect-row.selected{border-color:var(--accent);outline:2px solid var(--accent)}
+  .rect-row .fld{margin-top:8px}
+  .rect-row label.small{font-size:13px;color:var(--dim)}
+  .rect-row select{width:auto}
+  .rect-row input[type=color]{width:44px;height:36px;padding:2px;cursor:pointer}
+  .badge{display:inline-block;border-radius:999px;padding:2px 8px;font-size:11px;background:var(--warn-soft);color:var(--warn)}
 </style>
 </head>
 <body>
 <main>
   <h1>嵌字工作台</h1>
-  <p class="dim small">漫画嵌字 · 按页跟踪进度、核查清单、待确认事项。嵌字本身仍在聊天里按规矩做，这里只收文件和记进度。</p>
+  <p class="dim small">漫画嵌字：按页跟踪进度，也可以在页内直接框选气泡、识别翻译、生成嵌字图。模型用你自己的 API key，额度你自己付。</p>
   <div class="notice">数据只存在你自己的浏览器里（localStorage），不经过任何服务器。换浏览器、换设备、清缓存都会看不到之前的数据——请经常用下面的「导出备份」存一份 JSON；别人打开这个链接看到的是他自己浏览器里的数据，互不相通。</div>
+
+  <section aria-label="模型设置" style="margin-top:20px">
+    <div class="card" style="padding:16px">
+      <h2>模型设置 <span class="small dim" style="font-weight:400">（嵌字页内「识别并翻译」用你自己的 key）</span></h2>
+      <p class="dim small" style="margin-top:8px">key 只存在你自己的浏览器里，不进仓库、不经过任何服务器；每次调用只发往你填的 base URL，额度由 key 的主人自己付。base URL 留空默认用 https://api.openai.com/v1，模型留空默认用 gpt-4o。</p>
+      <label class="small" style="display:block;margin-top:10px"><b>API base URL</b></label>
+      <input type="text" id="apiBase" placeholder="https://api.openai.com/v1" style="margin-top:4px" autocomplete="off">
+      <label class="small" style="display:block;margin-top:10px"><b>API key</b></label>
+      <input type="password" id="apiKey" placeholder="sk-..." style="margin-top:4px" autocomplete="off">
+      <label class="small" style="display:block;margin-top:10px"><b>模型（需支持看图）</b></label>
+      <input type="text" id="apiModel" placeholder="gpt-4o" style="margin-top:4px" autocomplete="off">
+      <div class="row" style="margin-top:12px">
+        <button class="btn" id="apiSave" type="button">保存设置</button>
+        <button class="btn ghost" id="apiTest" type="button">测试连接</button>
+        <span class="small" id="apiStatus" style="color:var(--accent)"></span>
+      </div>
+    </div>
+  </section>
 
   <div class="tabs" id="bookTabs"></div>
   <div id="newBookBox" style="margin-top:10px"></div>
@@ -148,9 +179,40 @@
       <input type="file" id="importFile" accept="application/json,.json" hidden>
       <button class="btn danger" id="wipeBtn" type="button">清空全部数据</button>
     </div>
-    <p class="dim small" style="margin-top:12px">来源：Muse 上的「嵌字任务」工作台同款内容与规矩，改写为不依赖服务器的单文件网页版。功能：传图、记进度、待确认清单、核查打勾。</p>
+    <p class="dim small" style="margin-top:12px">来源：Muse 上的「嵌字任务」工作台同款内容与规矩，改写为不依赖服务器的单文件网页版。功能：传图、记进度、待确认清单、核查打勾、页内框选嵌字（自带 API key）。</p>
   </footer>
 </main>
+
+<!-- 嵌字工作区（v2 新增）：全屏覆盖层，平时隐藏 -->
+<div id="lwOverlay" class="overlay" role="dialog" aria-label="嵌字工作区">
+  <div style="max-width:900px;margin:0 auto;padding:20px 16px 64px">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
+      <h2 id="lwTitle">嵌字</h2>
+      <button class="btn ghost" id="lwClose" type="button">返回</button>
+    </div>
+    <div class="notice" style="margin-top:12px">只选带彩色边框的对话、旁白和心声，拟声词和环境音大字不要选。框全部由你手动画，模型不会自己猜位置——<b>禁止估计框位置</b>。画框时尽量贴着气泡内沿，别框到气泡边线和人物上。</div>
+    <p class="dim small" style="margin-top:10px">在图上按住拖动，画出一个框；拖动框内可以移动，拖四个角可以改大小；点一下框选中它，选中的框可以在下面改颜色、改文字或删除（Delete 键也可删）。也可以不点识别，直接在框列表里填中文再生成。</p>
+    <div style="margin-top:10px;text-align:center">
+      <canvas id="lwCanvas" style="max-width:100%;border:1px solid var(--border);border-radius:var(--radius);background:var(--alt);cursor:crosshair;touch-action:none"></canvas>
+    </div>
+    <div class="row" style="margin-top:12px">
+      <button class="btn" id="lwOcr" type="button">识别并翻译</button>
+      <button class="btn" id="lwRender" type="button">生成嵌字图</button>
+      <button class="btn ghost" id="lwDownload" type="button" disabled>下载成品 PNG</button>
+      <button class="btn ghost" id="lwSaveResult" type="button" disabled>保存为本页成品图</button>
+    </div>
+    <p class="small" id="lwStatus" style="margin-top:8px;color:var(--accent)"></p>
+    <div style="display:flex;justify-content:space-between;align-items:baseline;margin-top:24px">
+      <h3 style="margin:0">框列表 <span class="small dim" id="lwRectCount"></span></h3>
+      <button class="btn danger" id="lwClearRects" type="button" style="padding:4px 8px">清空所有框</button>
+    </div>
+    <div id="lwRectList"></div>
+    <div id="lwResultArea" style="display:none;margin-top:24px">
+      <h3 style="margin:0 0 10px">成品预览</h3>
+      <img id="lwResultImg" alt="成品预览" style="max-width:100%;border:1px solid var(--border);border-radius:var(--radius);background:var(--alt)">
+    </div>
+  </div>
+</div>
 
 <input type="file" id="addPagesInput" accept="image/*" multiple hidden>
 <input type="file" id="docInput" hidden>
@@ -158,6 +220,7 @@
 
 <script>
 "use strict";
+/* ================= 跟踪工作台（v1 原样保留） ================= */
 var KEY = "manga-lettering-workbench-v1";
 var STATUSES = ["未开始","处理中","待核查","待确认","已完成"];
 var CHECKS = [
@@ -325,6 +388,7 @@ function buildDetail(book, page){
     '<div class="row" style="margin-top:8px"><button class="btn ghost" id="saveNote" type="button">保存备注</button></div>'+
     '<div class="row" style="margin-top:16px;border-top:1px solid var(--border);padding-top:14px">'+
     '<button class="btn ghost" id="upOrig" type="button">'+(page.original?"换原图":"传原图")+"</button>"+
+    '<button class="btn" id="letterBtn" type="button">开始嵌字</button>'+
     '<button class="btn" id="upResult" type="button">'+(page.result?"换成品图":"传成品图")+"</button>"+
     '<button class="btn danger" id="delPage" type="button">删除这一页</button></div>';
   div.innerHTML = h;
@@ -338,6 +402,7 @@ function buildDetail(book, page){
     page.note = div.querySelector("#pageNote").value.trim(); page.updatedAt=nowISO(); save(state); render();
   };
   div.querySelector("#upOrig").onclick = function(){ pageImgTarget={pageId:page.id, kind:"original"}; document.getElementById("pageImgInput").click(); };
+  div.querySelector("#letterBtn").onclick = function(){ openLettering(book, page); };
   div.querySelector("#upResult").onclick = function(){ pageImgTarget={pageId:page.id, kind:"result"}; document.getElementById("pageImgInput").click(); };
   div.querySelector("#delPage").onclick = function(){
     if (!confirm("删除第 "+page.no+" 页？")) return;
@@ -440,6 +505,490 @@ document.getElementById("wipeBtn").onclick = function(){
   if (!confirm("清空全部书籍、页面和待确认事项？先导出备份再清。")) return;
   localStorage.removeItem(KEY); state = seed(); activeBookId = state.books[0].id; openPageId=null; save(state); render();
 };
+
+/* ================= 模型设置（API，v2 新增） =================
+   key 只存在本浏览器 localStorage（单独的 key，不进跟踪数据），
+   导出/导入备份不会带上它。调用只发往用户自己填的 base URL。 */
+var API_KEY = "manga-lettering-workbench-api-v1";
+function loadApi(){
+  try { var raw = localStorage.getItem(API_KEY); if (raw){ var c = JSON.parse(raw); if (c) return {baseUrl:c.baseUrl||"", key:c.key||"", model:c.model||""}; } } catch(e){}
+  return {baseUrl:"", key:"", model:""};
+}
+function saveApiCfg(cfg){ try { localStorage.setItem(API_KEY, JSON.stringify(cfg)); } catch(e){} }
+var apiCfg = loadApi();
+function apiBase(){ var b = (apiCfg.baseUrl||"").trim(); return b ? b.replace(/\/+$/,"") : "https://api.openai.com/v1"; }
+function apiModel(){ return (apiCfg.model||"").trim() || "gpt-4o"; }
+function saveApiFromInputs(){
+  apiCfg = {baseUrl: document.getElementById("apiBase").value.trim(),
+            key: document.getElementById("apiKey").value.trim(),
+            model: document.getElementById("apiModel").value.trim()};
+  saveApiCfg(apiCfg);
+  return apiCfg;
+}
+/* 把 HTTP 状态翻译成人能看懂的中文原因；服务端返回的 message 也带上。 */
+function httpErrorText(status, data){
+  var m = data && data.error && data.error.message ? "（" + data.error.message + "）" : "";
+  if (status===401) return "API key 无效或没有权限（401），请检查 key 是否正确" + m;
+  if (status===403) return "请求被拒绝（403）：key 可能没有调用该模型的权限" + m;
+  if (status===404) return "接口或模型不存在（404）：检查 base URL 和模型名是否正确" + m;
+  if (status===429) return "请求太频繁或额度已用完（429），稍后再试，或检查账户额度" + m;
+  if (status===400) return "请求有误（400）" + m;
+  if (status>=500) return "模型服务暂时出错（HTTP " + status + "），稍后再试" + m;
+  return "调用失败（HTTP " + status + "）" + m;
+}
+function callChat(messages, maxTokens){
+  var url = apiBase() + "/chat/completions";
+  return fetch(url, {
+    method:"POST",
+    headers:{"Content-Type":"application/json","Authorization":"Bearer " + apiCfg.key},
+    body: JSON.stringify({model: apiModel(), messages: messages, temperature: 0.3, max_tokens: maxTokens || 1000})
+  }).then(function(res){
+    return res.text().then(function(t){
+      var data = null; try { data = JSON.parse(t); } catch(e){}
+      if (!res.ok) throw new Error(httpErrorText(res.status, data));
+      return data;
+    });
+  }).catch(function(err){
+    if (err instanceof TypeError) throw new Error("网络请求失败：base URL 可能填错了、网络不通，或者该接口不支持浏览器直接调用（跨域被挡）。请检查地址后重试，或换一个支持浏览器调用的接口。");
+    throw err;
+  });
+}
+function apiStatus(msg){ document.getElementById("apiStatus").textContent = msg; }
+document.getElementById("apiBase").value = apiCfg.baseUrl;
+document.getElementById("apiKey").value = apiCfg.key;
+document.getElementById("apiModel").value = apiCfg.model;
+document.getElementById("apiSave").onclick = function(){
+  saveApiFromInputs();
+  apiStatus(apiCfg.key ? "已保存。key 只存在本浏览器里。" : "已保存，但还没有填 key，识别功能用不了。");
+};
+document.getElementById("apiTest").onclick = function(){
+  saveApiFromInputs();
+  if (!apiCfg.key){ apiStatus("先填 API key 再测试。"); return; }
+  apiStatus("正在测试连接…");
+  callChat([{role:"user", content:"你好"}], 1).then(function(){
+    apiStatus("连接成功：模型可正常调用。");
+  }).catch(function(err){
+    apiStatus("连接失败：" + err.message);
+  });
+};
+
+/* ================= 页内嵌字工作区（v2 新增） =================
+   框全部由用户手动画（禁止估计框位置），没有自动检测。
+   框坐标按图片比例（0~1）存，与显示尺寸无关；
+   OCR 裁图和生成嵌字图都按原图分辨率算。框数据存在该页的
+   page.lettering.rects 里，随页面数据一起保存/导出。 */
+var BUBBLE_COLORS = [
+  {name:"粉", value:"#ff6b9d"}, {name:"蓝", value:"#4a90d9"},
+  {name:"白", value:"#ffffff"}, {name:"黑", value:"#333333"},
+  {name:"紫", value:"#9b59b6"}, {name:"绿", value:"#27ae60"},
+  {name:"橙", value:"#e67e22"}, {name:"红", value:"#e74c3c"}
+];
+var FILL_COLORS = [
+  {name:"白", value:"#ffffff"}, {name:"黑", value:"#000000"},
+  {name:"米", value:"#fdf6e3"}, {name:"浅灰", value:"#f0f0f0"}
+];
+var lw = null; // {book, page, img, canvas, ctx, rects, selectedId, drag, renderCanvas, generated, busy}
+
+function clamp01(v){ return v<0?0:(v>1?1:v); }
+function hexA(hex, a){
+  var n = parseInt(String(hex||"#000000").replace("#",""), 16);
+  if (isNaN(n)) n = 0;
+  return "rgba(" + ((n>>16)&255) + "," + ((n>>8)&255) + "," + (n&255) + "," + a + ")";
+}
+function saveQuiet(d){ try { localStorage.setItem(KEY, JSON.stringify(d)); return true; } catch(e){ return false; } }
+function lwStatus(msg){ var el = document.getElementById("lwStatus"); if (el) el.textContent = msg || ""; }
+function saveLettering(){
+  if (!lw) return;
+  lw.page.lettering = {rects: lw.rects};
+  lw.page.updatedAt = nowISO();
+  if (!saveQuiet(state)) lwStatus("本地存储已满：框的位置这次没存下来（本页内仍可用），请先导出备份清理空间。");
+}
+
+function openLettering(book, page){
+  if (!page.original){ alert("先给这一页传原图，才能开始嵌字。"); return; }
+  if (!page.lettering || !Array.isArray(page.lettering.rects)) page.lettering = {rects: []};
+  var img = new Image();
+  img.onload = function(){
+    var canvas = document.getElementById("lwCanvas");
+    var s = Math.min(1, 720 / img.naturalWidth); // 显示画布最宽 720px，省性能
+    canvas.width = Math.max(1, Math.round(img.naturalWidth * s));
+    canvas.height = Math.max(1, Math.round(img.naturalHeight * s));
+    var rc = document.createElement("canvas"); // 生成用全分辨率画布
+    rc.width = img.naturalWidth; rc.height = img.naturalHeight;
+    lw = {book: book, page: page, img: img, canvas: canvas, ctx: canvas.getContext("2d"),
+          rects: page.lettering.rects, selectedId: null, drag: null, renderCanvas: rc, generated: false, busy: false};
+    document.getElementById("lwTitle").textContent = "嵌字 · " + book.title + " 第 " + page.no + " 页";
+    document.getElementById("lwResultArea").style.display = "none";
+    document.getElementById("lwDownload").disabled = true;
+    document.getElementById("lwSaveResult").disabled = true;
+    lwStatus("");
+    document.getElementById("lwOverlay").classList.add("open");
+    document.body.style.overflow = "hidden";
+    drawLw(); renderRectList();
+  };
+  img.onerror = function(){ alert("原图打不开，请重新传一张原图。"); };
+  img.src = page.original;
+}
+
+/* --- 画布：显示原图 + 框 --- */
+function drawLw(){
+  if (!lw) return;
+  var c = lw.canvas, ctx = lw.ctx;
+  ctx.clearRect(0, 0, c.width, c.height);
+  ctx.drawImage(lw.img, 0, 0, c.width, c.height);
+  lw.rects.forEach(function(r, idx){
+    var x = r.x * c.width, y = r.y * c.height, w = r.w * c.width, h = r.h * c.height;
+    var sel = r.id === lw.selectedId;
+    ctx.fillStyle = hexA(r.color, 0.14); ctx.fillRect(x, y, w, h);
+    ctx.strokeStyle = r.color; ctx.lineWidth = sel ? 3 : 2; ctx.strokeRect(x, y, w, h);
+    var ly = y - 20 < 0 ? y : y - 20; // 序号牌：框上方，贴顶时放框内
+    ctx.fillStyle = r.color; ctx.fillRect(x, ly, 24, 18);
+    ctx.fillStyle = "#fff"; ctx.font = "700 12px sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.fillText(String(idx + 1), x + 12, ly + 9);
+    if (sel){
+      ctx.fillStyle = "#fff"; ctx.strokeStyle = r.color; ctx.lineWidth = 2;
+      [[x, y], [x + w, y], [x, y + h], [x + w, y + h]].forEach(function(p){
+        ctx.beginPath(); ctx.rect(p[0] - 5, p[1] - 5, 10, 10); ctx.fill(); ctx.stroke();
+      });
+    }
+  });
+}
+function lwPos(e){
+  var r = lw.canvas.getBoundingClientRect();
+  return {x: clamp01((e.clientX - r.left) / r.width), y: clamp01((e.clientY - r.top) / r.height)};
+}
+function hitRect(nx, ny){
+  for (var i = lw.rects.length - 1; i >= 0; i--){
+    var r = lw.rects[i];
+    if (nx >= r.x && nx <= r.x + r.w && ny >= r.y && ny <= r.y + r.h) return r;
+  }
+  return null;
+}
+function hitHandle(nx, ny, r){
+  var t = 12 / Math.min(lw.canvas.width, lw.canvas.height);
+  var cs = [[r.x, r.y, "nw"], [r.x + r.w, r.y, "ne"], [r.x, r.y + r.h, "sw"], [r.x + r.w, r.y + r.h, "se"]];
+  for (var i = 0; i < cs.length; i++){
+    if (Math.abs(nx - cs[i][0]) < t && Math.abs(ny - cs[i][1]) < t) return cs[i][2];
+  }
+  return null;
+}
+var lwCanvasEl = document.getElementById("lwCanvas");
+lwCanvasEl.addEventListener("pointerdown", function(e){
+  if (!lw || lw.busy) return;
+  e.preventDefault();
+  try { lwCanvasEl.setPointerCapture(e.pointerId); } catch(err){}
+  var p = lwPos(e);
+  var sel = null;
+  if (lw.selectedId) sel = lw.rects.find(function(r){ return r.id === lw.selectedId; }) || null;
+  var handle = sel ? hitHandle(p.x, p.y, sel) : null;
+  if (handle){
+    lw.drag = {mode: "resize", rect: sel, corner: handle, start: p, orig: {x: sel.x, y: sel.y, w: sel.w, h: sel.h}};
+    return;
+  }
+  var hit = hitRect(p.x, p.y);
+  if (hit){
+    lw.selectedId = hit.id;
+    lw.drag = {mode: "move", rect: hit, start: p, orig: {x: hit.x, y: hit.y}};
+    drawLw(); renderRectList();
+    return;
+  }
+  var r = {id: uid(), x: p.x, y: p.y, w: 0, h: 0, color: "#ff6b9d", fill: "#ffffff", jp: "", zh: "", empty: false};
+  lw.rects.push(r);
+  lw.selectedId = r.id;
+  lw.drag = {mode: "draw", rect: r, start: p};
+  drawLw(); renderRectList();
+});
+lwCanvasEl.addEventListener("pointermove", function(e){
+  if (!lw) return;
+  var p = lwPos(e);
+  if (!lw.drag){
+    var sel = lw.selectedId ? lw.rects.find(function(r){ return r.id === lw.selectedId; }) : null;
+    if (sel && hitHandle(p.x, p.y, sel)) lwCanvasEl.style.cursor = "nwse-resize";
+    else if (hitRect(p.x, p.y)) lwCanvasEl.style.cursor = "move";
+    else lwCanvasEl.style.cursor = "crosshair";
+    return;
+  }
+  var d = lw.drag, r = d.rect;
+  if (d.mode === "draw"){
+    r.x = Math.min(d.start.x, p.x); r.y = Math.min(d.start.y, p.y);
+    r.w = Math.abs(p.x - d.start.x); r.h = Math.abs(p.y - d.start.y);
+  } else if (d.mode === "move"){
+    r.x = Math.min(clamp01(d.orig.x + (p.x - d.start.x)), 1 - r.w);
+    r.y = Math.min(clamp01(d.orig.y + (p.y - d.start.y)), 1 - r.h);
+  } else if (d.mode === "resize"){
+    var x2 = d.orig.x + d.orig.w, y2 = d.orig.y + d.orig.h;
+    if (d.corner[1] === "w"){ r.x = Math.min(p.x, x2 - 0.01); r.w = x2 - r.x; }
+    if (d.corner[1] === "e"){ r.w = Math.max(0.01, p.x - d.orig.x); }
+    if (d.corner[0] === "n"){ r.y = Math.min(p.y, y2 - 0.01); r.h = y2 - r.y; }
+    if (d.corner[0] === "s"){ r.h = Math.max(0.01, p.y - d.orig.y); }
+    r.x = clamp01(r.x); r.y = clamp01(r.y);
+    r.w = Math.min(r.w, 1 - r.x); r.h = Math.min(r.h, 1 - r.y);
+  }
+  drawLw();
+});
+function lwEndDrag(){
+  if (!lw || !lw.drag) return;
+  if (lw.drag.mode === "draw"){
+    var r = lw.drag.rect;
+    if (r.w < 0.01 || r.h < 0.01){ // 太小的框当误点，丢弃
+      lw.rects = lw.rects.filter(function(x){ return x !== r; });
+      lw.selectedId = null;
+    }
+  }
+  lw.drag = null;
+  saveLettering(); drawLw(); renderRectList();
+}
+lwCanvasEl.addEventListener("pointerup", lwEndDrag);
+lwCanvasEl.addEventListener("pointercancel", lwEndDrag);
+document.addEventListener("keydown", function(e){
+  if (!lw) return;
+  if ((e.key === "Delete" || e.key === "Backspace") && lw.selectedId){
+    var t = e.target;
+    if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable)) return;
+    e.preventDefault();
+    lw.rects = lw.rects.filter(function(r){ return r.id !== lw.selectedId; });
+    lw.selectedId = null;
+    saveLettering(); drawLw(); renderRectList();
+  }
+  if (e.key === "Escape" && !lw.busy) document.getElementById("lwClose").click();
+});
+
+/* --- 框列表：颜色、底色、日文、中文（可改）、删除 --- */
+function colorSelectHTML(list, current){
+  var h = "";
+  list.forEach(function(c){ h += '<option value="' + c.value + '"' + (c.value === current ? " selected" : "") + ">" + c.name + "</option>"; });
+  h += '<option value=""' + (list.every(function(c){ return c.value !== current; }) ? " selected" : "") + ">自定义…</option>";
+  return h;
+}
+function renderRectList(){
+  if (!lw) return;
+  var list = document.getElementById("lwRectList");
+  document.getElementById("lwRectCount").textContent = lw.rects.length ? "共 " + lw.rects.length + " 个框" : "";
+  list.innerHTML = "";
+  if (!lw.rects.length){
+    list.innerHTML = '<p class="dim small">还没有框。在上面图上按住拖动，画出第一个框。</p>';
+    return;
+  }
+  lw.rects.forEach(function(r, idx){
+    var row = document.createElement("div");
+    row.className = "card rect-row" + (r.id === lw.selectedId ? " selected" : "");
+    row.innerHTML =
+      '<div class="row" style="justify-content:space-between"><b class="mono">框 ' + (idx + 1) + "</b>" +
+      (r.empty ? '<span class="badge">框内无文字，生成时跳过</span>' : "") +
+      '<button type="button" class="btn danger" data-act="del" style="padding:4px 8px">删除</button></div>' +
+      '<div class="row" style="margin-top:8px"><label class="small">气泡色</label>' +
+      '<select data-f="color">' + colorSelectHTML(BUBBLE_COLORS, r.color) + "</select>" +
+      '<input type="color" data-f="colorPick" value="' + esc(r.color) + '">' +
+      '<label class="small" style="margin-left:8px">底色</label>' +
+      '<select data-f="fill">' + colorSelectHTML(FILL_COLORS, r.fill) + "</select>" +
+      '<input type="color" data-f="fillPick" value="' + esc(r.fill) + '"></div>' +
+      '<div class="fld"><label class="small">日文（识别结果，可改）</label>' +
+      '<input type="text" data-f="jp" value="' + esc(r.jp) + '" placeholder="点「识别并翻译」后自动填入"></div>' +
+      '<div class="fld"><label class="small">中文（嵌字时用的就是这里的字）</label>' +
+      '<textarea rows="2" data-f="zh" placeholder="识别后自动填入，也可以直接手写">' + esc(r.zh) + "</textarea></div>";
+    row.addEventListener("click", function(){ lw.selectedId = r.id; drawLw(); renderRectList(); });
+    row.querySelector('[data-act="del"]').onclick = function(ev){
+      ev.stopPropagation();
+      lw.rects = lw.rects.filter(function(x){ return x !== r; });
+      if (lw.selectedId === r.id) lw.selectedId = null;
+      saveLettering(); drawLw(); renderRectList();
+    };
+    var colorSel = row.querySelector('[data-f="color"]');
+    var colorPick = row.querySelector('[data-f="colorPick"]');
+    colorSel.onchange = function(){
+      if (colorSel.value){ r.color = colorSel.value; colorPick.value = colorSel.value; }
+      saveLettering(); drawLw();
+    };
+    colorPick.oninput = function(){ r.color = colorPick.value; colorSel.value = ""; saveLettering(); drawLw(); };
+    var fillSel = row.querySelector('[data-f="fill"]');
+    var fillPick = row.querySelector('[data-f="fillPick"]');
+    fillSel.onchange = function(){
+      if (fillSel.value){ r.fill = fillSel.value; fillPick.value = fillSel.value; }
+      saveLettering();
+    };
+    fillPick.oninput = function(){ r.fill = fillPick.value; fillSel.value = ""; saveLettering(); };
+    row.querySelector('[data-f="jp"]').addEventListener("change", function(e){ r.jp = e.target.value; saveLettering(); });
+    row.querySelector('[data-f="zh"]').addEventListener("change", function(e){ r.zh = e.target.value; r.empty = false; saveLettering(); });
+    row.querySelectorAll("input,select,textarea").forEach(function(el){
+      el.addEventListener("click", function(ev){ ev.stopPropagation(); }); // 点输入框不触发行选中重绘，避免丢焦点
+    });
+    list.appendChild(row);
+  });
+  if (lw.busy) list.querySelectorAll("input,select,textarea,button").forEach(function(el){ el.disabled = true; });
+}
+
+/* --- 识别并翻译：逐个框裁图，发给视觉模型 --- */
+function cropDataUrl(img, rect){
+  var W = img.naturalWidth, H = img.naturalHeight;
+  var x = Math.round(rect.x * W), y = Math.round(rect.y * H);
+  var w = Math.max(1, Math.round(rect.w * W)), h = Math.max(1, Math.round(rect.h * H));
+  var c = document.createElement("canvas");
+  var s = Math.min(1, 1024 / Math.max(w, h)); // 裁图最长边压到 1024，省流量和额度
+  c.width = Math.max(1, Math.round(w * s)); c.height = Math.max(1, Math.round(h * s));
+  c.getContext("2d").drawImage(img, x, y, w, h, 0, 0, c.width, c.height);
+  return c.toDataURL("image/jpeg", 0.85);
+}
+function parseOcrReply(text){
+  var m = String(text || "").match(/\{[\s\S]*\}/);
+  if (m){
+    try {
+      var o = JSON.parse(m[0]);
+      return {jp: String(o.jp || ""), zh: String(o.zh || ""), empty: !!o.empty};
+    } catch(e){}
+  }
+  return {jp: "", zh: String(text || "").trim(), empty: false}; // 模型没按 JSON 回时，整段当译文
+}
+function ocrRect(img, rect){
+  var prompt = "这是一张漫画页的局部裁图，框里是日文对白、旁白或心声（可能是竖排）。请做两件事：1）逐字转写框内所有日文，一个字都不要漏，也不要自己补字；2）把转写出的日文翻译成优美自然的中文，贴合原意，读起来像中文漫画里的台词。如果框里没有任何文字，empty 设为 true。只返回 JSON，不要加任何解释：{\"jp\":\"日文转写\",\"zh\":\"中文翻译\",\"empty\":false}";
+  return callChat([{role: "user", content: [
+    {type: "text", text: prompt},
+    {type: "image_url", image_url: {url: cropDataUrl(img, rect)}}
+  ]}], 1000).then(function(data){
+    var content = data && data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content || "";
+    if (!content) throw new Error("模型返回了空结果，请换个模型或重试。");
+    return parseOcrReply(content);
+  });
+}
+function setLwBusy(b){
+  lw.busy = b;
+  ["lwOcr", "lwRender", "lwClearRects"].forEach(function(id){ document.getElementById(id).disabled = b; });
+  document.getElementById("lwDownload").disabled = b || !lw.generated;
+  document.getElementById("lwSaveResult").disabled = b || !lw.generated;
+}
+document.getElementById("lwOcr").onclick = function(){
+  if (!lw || lw.busy) return;
+  saveApiFromInputs(); // 没点过「保存设置」也用输入框里现填的值
+  if (!apiCfg.key){ lwStatus("先在页面顶部的「模型设置」里填 API key，再点识别。"); return; }
+  if (!lw.rects.length){ lwStatus("先在图上画框，再点识别。"); return; }
+  setLwBusy(true);
+  renderRectList(); // 识别期间锁住框列表，避免重绘丢正在改的字
+  var i = 0, done = 0;
+  function next(){
+    if (i >= lw.rects.length){
+      setLwBusy(false);
+      lwStatus("识别完成：共 " + lw.rects.length + " 个框。中文译文可以在下面直接改，改完点「生成嵌字图」。");
+      saveLettering(); renderRectList();
+      return;
+    }
+    var r = lw.rects[i];
+    lwStatus("正在识别第 " + (i + 1) + "/" + lw.rects.length + " 个框…");
+    ocrRect(lw.img, r).then(function(res){
+      r.jp = res.jp; r.zh = res.zh; r.empty = res.empty;
+      done += 1; i += 1;
+      saveLettering(); renderRectList();
+      next();
+    }).catch(function(err){
+      setLwBusy(false);
+      lwStatus("识别失败：" + err.message + "（已完成 " + done + "/" + lw.rects.length + " 个框，已识别的已保存。）");
+      saveLettering(); renderRectList();
+    });
+  }
+  next();
+};
+
+/* --- 生成嵌字图：原图分辨率，填底色后排竖排字 --- */
+function drawVertical(ctx, text, x, y, w, h, color){
+  var chars = String(text).replace(/\s+/g, "").split("");
+  if (!chars.length) return;
+  var family = '"PingFang SC","Hiragino Sans GB","Microsoft YaHei","Noto Sans SC",sans-serif';
+  function layout(size){
+    var perCol = Math.max(1, Math.floor(h / (size * 1.05)));
+    var cols = [];
+    for (var i = 0; i < chars.length; i += perCol) cols.push(chars.slice(i, i + perCol));
+    var colW = size * 1.25;
+    return {cols: cols, colW: colW, totalW: cols.length * colW, size: size};
+  }
+  function fits(size){
+    var L = layout(size);
+    return L.totalW <= w && size * 1.05 <= h;
+  }
+  var lo = 4, hi = Math.floor(Math.min(w, h)), best = null;
+  while (lo <= hi){ // 二分找能塞进框的最大字号，字永远不溢出
+    var mid = Math.floor((lo + hi) / 2);
+    if (fits(mid)){ best = layout(mid); lo = mid + 1; } else { hi = mid - 1; }
+  }
+  if (!best) best = layout(4);
+  var L = best, size = L.size;
+  ctx.save();
+  ctx.font = "700 " + size + "px " + family;
+  ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.lineJoin = "round";
+  var startX = x + (w - L.totalW) / 2;
+  L.cols.forEach(function(col, ci){
+    var cx = startX + (L.cols.length - 1 - ci) * L.colW + L.colW / 2; // 列从右往左
+    var colH = col.length * size * 1.05;
+    var topY = y + (h - colH) / 2;
+    col.forEach(function(ch, ri){
+      var cy = topY + ri * size * 1.05 + size * 0.5;
+      ctx.strokeStyle = color; ctx.lineWidth = size * 0.30; ctx.strokeText(ch, cx, cy); // 外圈彩色边（最粗）
+      ctx.strokeStyle = "#000000"; ctx.lineWidth = size * 0.16; ctx.strokeText(ch, cx, cy); // 黑描边
+      ctx.fillStyle = "#ffffff"; ctx.fillText(ch, cx, cy); // 白字
+    });
+  });
+  ctx.restore();
+}
+document.getElementById("lwRender").onclick = function(){
+  if (!lw || lw.busy) return;
+  var usable = lw.rects.filter(function(r){ return !r.empty && (r.zh || "").replace(/\s+/g, ""); });
+  if (!usable.length){
+    lwStatus("还没有能嵌的框：先点「识别并翻译」，或在框列表里直接填中文；框内无文字的框生成时会跳过。");
+    return;
+  }
+  var rc = lw.renderCanvas, rctx = rc.getContext("2d");
+  rctx.clearRect(0, 0, rc.width, rc.height);
+  rctx.drawImage(lw.img, 0, 0);
+  var W = lw.img.naturalWidth, H = lw.img.naturalHeight;
+  usable.forEach(function(r){
+    var x = r.x * W, y = r.y * H, w = r.w * W, h = r.h * H;
+    rctx.fillStyle = r.fill || "#ffffff";
+    rctx.fillRect(x, y, w, h); // 擦原字：整框填底色（默认白）
+    drawVertical(rctx, r.zh, x, y, w, h, r.color || "#ff6b9d");
+  });
+  document.getElementById("lwResultImg").src = rc.toDataURL("image/png");
+  document.getElementById("lwResultArea").style.display = "block";
+  lw.generated = true;
+  document.getElementById("lwDownload").disabled = false;
+  document.getElementById("lwSaveResult").disabled = false;
+  var skipped = lw.rects.length - usable.length;
+  lwStatus("嵌字图已生成：嵌了 " + usable.length + " 个框" + (skipped ? "，跳过 " + skipped + " 个（无文字或无中文）" : "") + "。检查无误后下载或保存。");
+};
+document.getElementById("lwDownload").onclick = function(){
+  if (!lw || !lw.generated) return;
+  lw.renderCanvas.toBlob(function(blob){
+    if (!blob){ lwStatus("导出失败：浏览器没能生成图片文件，再试一次。"); return; }
+    var a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = lw.book.title + "-P" + lw.page.no + "-lettered.png";
+    a.click();
+    setTimeout(function(){ URL.revokeObjectURL(a.href); }, 1000);
+  }, "image/png");
+};
+document.getElementById("lwSaveResult").onclick = function(){
+  if (!lw || !lw.generated) return;
+  var old = lw.page.result;
+  lw.page.result = lw.renderCanvas.toDataURL("image/png");
+  lw.page.updatedAt = nowISO();
+  if (saveQuiet(state)){
+    lwStatus("已保存为本页成品图，返回后能在页卡上看到。");
+  } else {
+    lw.page.result = old; // 存不下就还原，避免内存与存储不一致
+    lwStatus("存不下：浏览器本地存储满了。请先点「下载成品 PNG」把图存到电脑，再导出备份清理空间。");
+  }
+};
+document.getElementById("lwClearRects").onclick = function(){
+  if (!lw || !lw.rects.length) return;
+  if (!confirm("清空这页的全部 " + lw.rects.length + " 个框？")) return;
+  lw.rects = [];
+  lw.selectedId = null;
+  saveLettering(); drawLw(); renderRectList();
+};
+document.getElementById("lwClose").onclick = function(){
+  saveLettering();
+  lw = null;
+  document.getElementById("lwOverlay").classList.remove("open");
+  document.body.style.overflow = "";
+  render();
+};
+
 render();
 </script>
 </body>
