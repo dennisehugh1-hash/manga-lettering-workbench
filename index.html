@@ -80,6 +80,7 @@
     <div class="card" style="padding:16px">
       <h2>模型设置 <span class="small dim" style="font-weight:400">（嵌字页内「识别并翻译」用你自己的 key）</span></h2>
       <p class="dim small" style="margin-top:8px">key 只存在你自己的浏览器里，不进仓库、不经过任何服务器；每次调用只发往你填的 base URL，额度由 key 的主人自己付。base URL 留空默认用 https://api.openai.com/v1，模型留空默认用 gpt-4o。</p>
+      <p class="small" style="margin-top:8px;color:var(--warn)">注意：模型必须支持看图；官方 api.openai.com 从浏览器直连可能被跨域挡住，报错只会显示通用网络失败——优先用明确支持浏览器调用的兼容接口，出错先换接口再怀疑 key。</p>
       <label class="small" style="display:block;margin-top:10px"><b>API base URL</b></label>
       <input type="text" id="apiBase" placeholder="https://api.openai.com/v1" style="margin-top:4px" autocomplete="off">
       <label class="small" style="display:block;margin-top:10px"><b>API key</b></label>
